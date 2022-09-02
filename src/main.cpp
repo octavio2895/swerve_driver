@@ -114,7 +114,7 @@ void position_correction(double Current_Angle);
 void velocity_control(double Current_Angle, uint32_t time_passed);
 void orientation_movement(float pwm_val);
 float pos_error, vel_error, vel_cmd, val, posKP=20, velKP=10, velKI=0.03, ki_ev=0;
-int i=0;
+// int i=0;
 void canISR();
 
 
@@ -143,6 +143,8 @@ void setup()
 
   CANattachInterrupt(canISR);
   CANfilterMask32Init(0, DEV_ID, 0x000000FF);
+  Serial2.println("Starting Loop!");
+
 }
 
 void loop() 
@@ -153,6 +155,7 @@ void loop()
   {
     read_can_data();
     flag_can_rx = false;
+    Serial2.println("Got packet!");
   }
 
   if (curr_millis > can_update_millis)
@@ -427,12 +430,12 @@ void can_send_status_6(CAN_msg_t* msg, SysState* state)
   msg->format = EXTENDED_FORMAT;
   msg->type = DATA_FRAME;
   msg->len = sizeof(buff);
-  for (int i = 0; i < 8; i++)
-  {
-    Serial2.print(buff[i],HEX);
-    Serial2.print(" ");
-  }
-  Serial2.println();
+  // for (int i = 0; i < 8; i++)
+  // {
+  //   Serial2.print(buff[i],HEX);
+  //   Serial2.print(" ");
+  // }
+  // Serial2.println();
   CANSend(msg);
 }
 
@@ -481,6 +484,7 @@ void velocity_control(double Current_Angle, uint32_t time_passed)
   pos_diff = Current_Angle - Previous_Angle;
   Previous_Angle = Current_Angle;
   angular_vel = (pos_diff/(time_passed))*1000/6; ///// VELOCITY FEEDBACK
+  sys_state.rpm_motor = angular_vel;
   vel_error = vel_cmd - angular_vel; ///// Velocity error
   ki_ev = vel_error*velKI+ki_ev;
   val = vel_error*velKP + ki_ev; ///// Valor PWM
