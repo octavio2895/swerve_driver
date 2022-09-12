@@ -46,6 +46,9 @@ const long interval = 1000;       // transmission interval (milliseconds)
 
 CAN_msg_t CAN_TX_msg;
 CAN_msg_t CAN_RX_msg;
+CAN_msg_t CAN_RX_pos_msg;
+CAN_msg_t CAN_RX_vel_msg;
+
 
 typedef struct
 {
@@ -115,7 +118,8 @@ void print_serial_msgs();
 void position_correction(double Current_Angle);
 void velocity_control(double Current_Angle, uint32_t time_passed);
 void orientation_movement(float pwm_val);
-float pos_error, vel_error, vel_cmd, val, posKP = 10, velKP = 2.5, velKI = 0.003, ki_ev = 0;
+void cpy_can_msg(CAN_msg_t *dest, CAN_msg_t *orig);
+float pos_error, vel_error, vel_cmd, val, posKP = 10, velKP = 2.5, velKI = 0.03, ki_ev = 0;
 // int i=0;
 void canISR();
 
@@ -211,7 +215,15 @@ void loop()
 
 void print_serial_msgs()
 {
-  // Serial.print();
+  Serial2.print("tpm: ");
+  Serial2.print(sys_state.target_pos_motor);
+  Serial2.print(" pm: ");
+  Serial2.print(convertRawAngleToDegrees(ams5600.getRawAngle()));
+  Serial2.print(" tvm: ");
+  Serial2.print(sys_state.target_rpm_motor);
+  Serial2.print(" vm: ");
+  Serial2.println(sys_state.rpm_motor);
+
 }
 
 void blink()
@@ -223,14 +235,23 @@ void blink()
 
 void canISR() // get CAN bus frame passed by a filter into fifo0
 {
-  // Serial2.println("GOT can packet!");
+  Serial2.println("GOT can packet!");
   CANReceive(&CAN_RX_msg);
+  uint32_t packet_type = (0xFF00 & CAN_RX_msg.id) >> 8;
+  switch (packet_type)
+  {
+  case CAN_PACKET_SET_RPM:
+    cpy_can_msg(&CAN_RX_vel_msg, &CAN_RX_msg);
+    break;
+  case CAN_PACKET_SET_POS:
+    cpy_can_msg(&CAN_RX_pos_msg, &CAN_RX_msg);
+    break;
+  }
   flag_can_rx = true;
 }
 
 void read_can_data()
 {
-  // Serial2.println("Got CAN packet!");
   uint32_t packet_type = (0xFF00 & CAN_RX_msg.id) >> 8;
   int32_t ind = 0;
   int len = CAN_RX_msg.len;
@@ -263,57 +284,19 @@ void read_can_data()
     break;
 
   case CAN_PACKET_SET_RPM:
-    // Serial2.println("Got CAN_PACKET_SET_RPM");
     ind = 0;
-    set_pid_speed(bldc_buffer_get_float32(CAN_RX_msg.data, 1e0, &ind));
+    set_pid_speed(bldc_buffer_get_float32(CAN_RX_vel_msg.data, 1e0, &ind));
     timeout_reset();
-    // Serial2.print(CAN_RX_msg.data[0], HEX);
-    // Serial2.print(" ");
-    // Serial2.print(CAN_RX_msg.data[1], HEX);
-    // Serial2.print(" ");
-    // Serial2.print(CAN_RX_msg.data[2], HEX);
-    // Serial2.print(" ");
-    // Serial2.print(CAN_RX_msg.data[3], HEX);
-    // Serial2.print(" ");
-    // Serial2.print(CAN_RX_msg.data[4], HEX);
-    // Serial2.print(" ");
-    // Serial2.print(CAN_RX_msg.data[5], HEX);
-    // Serial2.print(" ");
-    // Serial2.print(CAN_RX_msg.data[6], HEX);
-    // Serial2.print(" ");
-    // Serial2.println(CAN_RX_msg.data[7], HEX);
     break;
 
   case CAN_PACKET_SET_POS:
-    // Serial2.println("Got CAN_PACKET_SET_POS");
     ind = 0;
-    // Serial2.print(CAN_RX_msg.data[0], HEX);
-    // Serial2.print(" ");
-    // Serial2.print(CAN_RX_msg.data[1], HEX);
-    // Serial2.print(" ");
-    // Serial2.print(CAN_RX_msg.data[2], HEX);
-    // Serial2.print(" ");
-    // Serial2.print(CAN_RX_msg.data[3], HEX);
-    // Serial2.print(" ");
-    // Serial2.print(CAN_RX_msg.data[4], HEX);
-    // Serial2.print(" ");
-    // Serial2.print(CAN_RX_msg.data[5], HEX);
-    // Serial2.print(" ");
-    // Serial2.print(CAN_RX_msg.data[6], HEX);
-    // Serial2.print(" ");
-    // Serial2.println(CAN_RX_msg.data[7], HEX);
-    ang_pos = bldc_buffer_get_float32(CAN_RX_msg.data, 1e6, &ind);
-    if (ang_pos == 0)
-    {
-      // Serial2.println("Angle 0!!!!!!!!!!!!!!!!!!!!!1");
-      break; //TODO fix bad comms
-    }
+    ang_pos = bldc_buffer_get_float32(CAN_RX_pos_msg.data, 1e6, &ind);
     set_pid_pos(ang_pos);
     timeout_reset();
     break;
 
   case CAN_PACKET_PROCESS_SHORT_BUFFER:
-    // Serial2.println("Got CAN_PACKET_PROCESS_SHORT_BUFFER");
     process_short_buffer(CAN_RX_msg.data);
     break;
   }
@@ -486,12 +469,6 @@ void can_send_status_6(CAN_msg_t *msg, SysState *state)
   msg->format = EXTENDED_FORMAT;
   msg->type = DATA_FRAME;
   msg->len = sizeof(buff);
-  // for (int i = 0; i < 8; i++)
-  // {
-  //   Serial2.print(buff[i],HEX);
-  //   Serial2.print(" ");
-  // }
-  // Serial2.println();
   CANSend(msg);
 }
 
@@ -510,23 +487,12 @@ void update_encoder()
 {
   CANdisableInterrupt();
   angle_pos = convertRawAngleToDegrees(ams5600.getRawAngle()) - OFFSET_ANGLE;
+  sys_state.pos_motor = angle_pos;
   CANenableInterrupt();
 }
 
 void update_vel_pos_sp()
 {
-  // pos_travel += entradas[1][i+1];
-  // pos_sp = pos_travel + first_pos;
-  // vel_sp = entradas[0][i+1];
-  // i = i + 1;
-  // Serial2.print("time: ");
-  // Serial2.print(curr_millis);
-  Serial2.print("Angle: ");
-  Serial2.println(angle_pos);
-  // Serial2.print(" vel: ");
-  // Serial2.print(angular_vel);
-  // Serial2.print(" pwm: ");
-  // Serial2.println(val);
   pos_sp = sys_state.target_pos_motor;
   vel_sp = sys_state.target_rpm_motor;
 }
@@ -545,8 +511,9 @@ void velocity_control(double Current_Angle, uint32_t time_passed)
   angular_vel = (pos_diff / (time_passed)) * 1000 / 6; ///// VELOCITY FEEDBACK
   sys_state.rpm_motor = angular_vel;
   // vel_error = vel_cmd - angular_vel; ///// Velocity error
-  // ki_ev = vel_error*velKI+ki_ev; // Integrator
-  val = pos_error * posKP; ///// Valor PWM
+  ki_ev = pos_error*velKI+ki_ev; // Integrator
+  // val = pos_error * posKP + ki_ev; ///// Valor PWM
+  val = pos_error * posKP;
 
   if (val > 0)
   {
@@ -674,6 +641,8 @@ int32_t bldc_buffer_get_int32(const uint8_t *buffer, int32_t *index)
                 ((uint32_t)buffer[*index + 2]) << 8 |
                 ((uint32_t)buffer[*index + 3]);
   *index += 4;
+  Serial2.print("RES: ");
+  Serial2.println(res);
   return res;
 }
 
@@ -694,7 +663,9 @@ float bldc_buffer_get_float16(const uint8_t *buffer, float scale, int32_t *index
 
 float bldc_buffer_get_float32(const uint8_t *buffer, float scale, int32_t *index)
 {
-  return (((float)bldc_buffer_get_int32(buffer, index)) / scale);
+  float val = (float)bldc_buffer_get_int32(buffer, index) / (float)scale;
+  Serial2.println(val);
+  return (val);
 }
 
 uint32_t genEId(uint32_t id, uint32_t packet_id)
@@ -803,4 +774,21 @@ void comm_can_send_buffer(uint8_t controller_id, uint8_t *data, unsigned int len
     // comm_can_transmit_eid_replace(controller_id |
     // 		((uint32_t)CAN_PACKET_PROCESS_RX_BUFFER << 8), send_buffer, ind++, true, 0);
   }
+}
+
+void cpy_can_msg(CAN_msg_t *dest, CAN_msg_t *orig)
+{
+  dest->ch = orig->ch;
+  dest->format = orig->format;
+  dest->id = orig->id;
+  dest->len = orig->len;
+  dest->type = orig->type;
+  dest->data[0] = orig->data[0];
+  dest->data[1] = orig->data[1];
+  dest->data[2] = orig->data[2];
+  dest->data[3] = orig->data[3];
+  dest->data[4] = orig->data[4];
+  dest->data[5] = orig->data[5];
+  dest->data[6] = orig->data[6];
+  dest->data[7] = orig->data[7];
 }
