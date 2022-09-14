@@ -128,6 +128,7 @@ void setup()
   Serial2.begin(115200);
   analogWriteFrequency(20000);
   Wire.begin();
+  Wire.setTimeout(1000);
   pinMode(PC13, OUTPUT);
   pinMode(PB8, OUTPUT); // Pins para el ouput PWM del motor
   pinMode(PB9, OUTPUT); //^^^
@@ -209,7 +210,7 @@ void loop()
   if (curr_millis > print_serial_millis)
   {
     print_serial_millis = curr_millis + PRINT_SERIAL_PERIOD;
-    print_serial_msgs();
+    // print_serial_msgs();
   }
 }
 
@@ -218,9 +219,12 @@ void print_serial_msgs()
   Serial2.print("tpm: ");
   Serial2.print(sys_state.target_pos_motor);
   Serial2.print(" pm: ");
-  Serial2.print(convertRawAngleToDegrees(ams5600.getRawAngle()));
+  // Serial2.print(convertRawAngleToDegrees(ams5600.getRawAngle()));
+  Serial2.print(sys_state.pos_motor);
   Serial2.print(" tvm: ");
   Serial2.print(sys_state.target_rpm_motor);
+  Serial2.print(" pwm: ");
+  Serial2.print(sys_state.dutycycle_motor);
   Serial2.print(" vm: ");
   Serial2.println(sys_state.rpm_motor);
 
@@ -235,7 +239,7 @@ void blink()
 
 void canISR() // get CAN bus frame passed by a filter into fifo0
 {
-  Serial2.println("GOT can packet!");
+  // Serial2.println("GOT can packet!");
   CANReceive(&CAN_RX_msg);
   uint32_t packet_type = (0xFF00 & CAN_RX_msg.id) >> 8;
   switch (packet_type)
@@ -523,8 +527,6 @@ void velocity_control(double Current_Angle, uint32_t time_passed)
       val = max_up;
       ki_ev = 0;
     }
-    Serial2.print("val: ");
-    Serial2.println(val);
   }
 
   else
@@ -535,9 +537,8 @@ void velocity_control(double Current_Angle, uint32_t time_passed)
       val = max_down;
       ki_ev = 0;
     }
-    Serial2.print("val: ");
-    Serial2.println(val);
   }
+  sys_state.dutycycle_motor = val;
 }
 
 void orientation_movement(float pwm_val)
@@ -560,7 +561,10 @@ void orientation_movement(float pwm_val)
 double convertRawAngleToDegrees(word newAngle)
 {
   if (newAngle == 0xFFFF)
-    return 0xFFFF;
+    {
+      Serial2.println("Press F");
+      return 0xFFFF;
+    }
   /* Raw data reports 0 - 4095 segments, which is 0.087 of a degree */
   float retVal = newAngle * 0.087890625;
   return retVal;
