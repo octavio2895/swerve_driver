@@ -21,9 +21,9 @@ HardwareSerial Serial2(PA3, PA2);
 #define UPDATE_VEL_POS_SP_PERIOD 20
 #define CONTROL_CORRECTION_PERIOD 2
 
-#define OFFSET_ANGLE -70
+#define OFFSET_ANGLE 0
 
-#define DEV_ID 54 // TODO change to UUID hash
+// #define DEV_ID 54 // TODO change to UUID hash
 #define FW_VERSION_MAJOR 1
 #define FW_VERSION_MINOR 0
 #define HW_NAME "OmniDir"
@@ -120,11 +120,13 @@ void velocity_control(double Current_Angle, uint32_t time_passed);
 void orientation_movement(float pwm_val);
 void cpy_can_msg(CAN_msg_t *dest, CAN_msg_t *orig);
 float pos_error, vel_error, vel_cmd, val, posKP = 10, velKP = 2.5, velKI = 0.03, ki_ev = 0;
+uint8_t DEV_ID;
 // int i=0;
 void canISR();
 
 void setup()
 {
+  DEV_ID = crc16(STM32_UUID_8, 12);
   Serial2.begin(115200);
   analogWriteFrequency(20000);
   Wire.begin();
@@ -146,12 +148,12 @@ void setup()
   if (!ret)
   {
     Serial2.println("Unable to get CAN"); // TODO Hangs on bootup. Might change this to a restart.
-    while (true)
-      ;
+    // while (true)
+    //   ;
   }
 
-  CANattachInterrupt(canISR);
-  CANfilterMask32Init(0, DEV_ID, 0x000000FF);
+  // CANattachInterrupt(canISR);
+  // CANfilterMask32Init(0, DEV_ID, 0x000000FF);
   Serial2.println("Starting Loop!");
 }
 
@@ -159,19 +161,19 @@ void loop()
 {
   curr_millis = millis();
 
-  if (flag_can_rx)
-  {
-    // CANReceive(&CAN_RX_msg);
-    // Serial2.println("Got packet!");
-    read_can_data();
-    flag_can_rx = false;
-  }
+  // if (flag_can_rx)
+  // {
+  //   // CANReceive(&CAN_RX_msg);
+  //   // Serial2.println("Got packet!");
+  //   read_can_data();
+  //   flag_can_rx = false;
+  // }
 
-  if (curr_millis > can_update_millis)
-  {
-    can_update_millis = curr_millis + CAN_UPDATE_PERIOD;
-    can_send_status_msgs();
-  }
+  // if (curr_millis > can_update_millis)
+  // {
+  //   can_update_millis = curr_millis + CAN_UPDATE_PERIOD;
+  //   can_send_status_msgs();
+  // }
 
   if (curr_millis > update_sensors_millis)
   {
