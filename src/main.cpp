@@ -152,8 +152,8 @@ void setup()
     //   ;
   }
 
-  // CANattachInterrupt(canISR);
-  // CANfilterMask32Init(0, DEV_ID, 0x000000FF);
+  CANattachInterrupt(canISR);
+  CANfilterMask32Init(0, DEV_ID, 0x000000FF);
   Serial2.println("Starting Loop!");
 }
 
@@ -161,19 +161,19 @@ void loop()
 {
   curr_millis = millis();
 
-  // if (flag_can_rx)
-  // {
-  //   // CANReceive(&CAN_RX_msg);
-  //   // Serial2.println("Got packet!");
-  //   read_can_data();
-  //   flag_can_rx = false;
-  // }
+  if (flag_can_rx)
+  {
+    // CANReceive(&CAN_RX_msg);
+    // Serial2.println("Got packet!");
+    read_can_data();
+    flag_can_rx = false;
+  }
 
-  // if (curr_millis > can_update_millis)
-  // {
-  //   can_update_millis = curr_millis + CAN_UPDATE_PERIOD;
-  //   can_send_status_msgs();
-  // }
+  if (curr_millis > can_update_millis)
+  {
+    can_update_millis = curr_millis + CAN_UPDATE_PERIOD;
+    can_send_status_msgs();
+  }
 
   if (curr_millis > update_sensors_millis)
   {
@@ -212,7 +212,7 @@ void loop()
   if (curr_millis > print_serial_millis)
   {
     print_serial_millis = curr_millis + PRINT_SERIAL_PERIOD;
-    // print_serial_msgs();
+    print_serial_msgs();
   }
 }
 
@@ -501,6 +501,7 @@ void update_vel_pos_sp()
 {
   pos_sp = sys_state.target_pos_motor;
   vel_sp = sys_state.target_rpm_motor;
+  
 }
 
 void position_correction(double Current_Angle)
